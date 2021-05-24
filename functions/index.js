@@ -61,6 +61,15 @@ app.post('/review', (request, response) => {
     })
 })
 
+const isEmpty = string => {
+  return string.trim() === ''
+}
+
+const isValidEmail = email => {
+  const emailRegEx = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+  return email.match(emailRegEx)
+}
+
 // Signup route
 app.post('/signup', (request, response) => {
   const user = {
@@ -70,9 +79,33 @@ app.post('/signup', (request, response) => {
     username: request.body.username
   }
 
-  let token
-  let userId
+  let errors = {}
 
+  if (isEmpty(user.email)) {
+    errors.email = 'Must not be empty'
+  } else {
+    if (!isValidEmail(user.email)) {
+      errors.email = 'Must be a valid email address '
+    }
+  }
+
+  if (isEmpty(user.password)) {
+    errors.password = 'Must not be empty'
+  }
+
+  if (user.password !== user.confirmPassword) {
+    errors.confirmPassword = 'Passwords must match'
+  }
+
+  if (isEmpty(user.username)) {
+    errors.username = 'Must not be empty'
+  }
+
+  if (Object.keys(errors).length !== 0) {
+    response.status(400).json(errors)
+  }
+
+  let token, userId
   db.doc(`/users/${user.username}`).get()
     .then(doc => {
       if (doc.exists) {
@@ -102,6 +135,42 @@ app.post('/signup', (request, response) => {
     .catch(error => {
       if (error.code === 'auth/email-already-in-use') {
         response.status(400).json({ error: 'Email already in use' })
+      } else {
+        response.status(500).json({ error: error.code })
+      }
+      console.error(error)
+    })
+})
+
+// Login route 
+app.post('/login', (request, response) => {
+  const user = {
+    email: request.body.email,
+    password: request.body.password
+  }
+
+  const errors = {}
+
+  if (isEmpty(user.email)) {
+    errors.email = 'Must not be empty'
+  }
+  if (isEmpty(user.password)) {
+    errors.password = 'Must not be empty'
+  }
+  if (Object.keys(errors).length !== 0) {
+    response.status(400).json(errors)
+  }
+
+  firebase.auth().signInWithEmailAndPassword(user.email, user.password)
+    .then(data => {
+      return data.user.getIdToken()
+    })
+    .then(token => {
+      response.json({ token })
+    })
+    .catch(error => {
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        response.status(403).json({ general: 'Wrong credentials' })
       } else {
         response.status(500).json({ error: error.code })
       }
